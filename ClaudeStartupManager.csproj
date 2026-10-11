@@ -11,6 +11,9 @@
     <ApplicationIcon>app.ico</ApplicationIcon>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <Company>C-Squared Solutions LLC</Company>
+    <Product>Claude Startup Manager</Product>
+    <Copyright>Copyright (c) 2026 C-Squared Solutions LLC</Copyright>
   </PropertyGroup>
 
 </Project>

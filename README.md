@@ -1,6 +1,6 @@
 # Claude Startup Manager
 
-[![build](https://github.com/Neelerak/ClaudeStartupManager/actions/workflows/build.yml/badge.svg)](https://github.com/Neelerak/ClaudeStartupManager/actions/workflows/build.yml)
+[![build](https://github.com/C-Squared-Solutions-LLC/ClaudeStartupManager/actions/workflows/build.yml/badge.svg)](https://github.com/C-Squared-Solutions-LLC/ClaudeStartupManager/actions/workflows/build.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 One taskbar click opens a whole set of [Claude Code](https://claude.com/claude-code) sessions and terminal windows, on the right virtual desktop and monitor, each titled correctly.
@@ -9,7 +9,7 @@ Windows 10/11 only. Unofficial; not affiliated with Anthropic.
 
 ## Download
 
-Grab a zip from [Releases](https://github.com/Neelerak/ClaudeStartupManager/releases):
+Grab a zip from [Releases](https://github.com/C-Squared-Solutions-LLC/ClaudeStartupManager/releases):
 
 - `…-self-contained.zip`: runs as is, no .NET install needed (bigger file).
 - `…-framework-dependent.zip`: small, needs the [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0).
