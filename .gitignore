@@ -1,0 +1,10 @@
+bin/
+obj/
+dist/
+dist-*/
+artifacts/
+.vs/
+.vscode/
+*.user
+*.suo
+*.zip

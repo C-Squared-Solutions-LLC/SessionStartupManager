@@ -1,0 +1,72 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write # only used by the release step on tags
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Version
+        id: version
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF -like 'refs/tags/v*') { $v = $env:GITHUB_REF_NAME.Substring(1) }
+          else { $v = "0.0.0-ci.$env:GITHUB_RUN_NUMBER" }
+          "value=$v" >> $env:GITHUB_OUTPUT
+          Write-Host "Version $v"
+
+      # Small exe, needs the .NET 8 Desktop Runtime installed.
+      - name: Publish (framework-dependent)
+        run: >
+          dotnet publish ClaudeStartupManager.csproj -c Release -r win-x64
+          --self-contained false -p:PublishSingleFile=true
+          -p:Version=${{ steps.version.outputs.value }}
+          -o artifacts/framework-dependent
+
+      # Larger exe that runs without any .NET install.
+      - name: Publish (self-contained)
+        run: >
+          dotnet publish ClaudeStartupManager.csproj -c Release -r win-x64
+          --self-contained true -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true
+          -p:Version=${{ steps.version.outputs.value }}
+          -o artifacts/self-contained
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $v = '${{ steps.version.outputs.value }}'
+          foreach ($flavor in 'framework-dependent', 'self-contained') {
+            $dir = "artifacts/$flavor"
+            Copy-Item README.md, LICENSE $dir
+            Get-ChildItem $dir -Filter *.pdb | Remove-Item
+            Compress-Archive -Path "$dir/*" -DestinationPath "artifacts/ClaudeStartupManager-$v-win-x64-$flavor.zip"
+          }
+          Get-ChildItem artifacts/*.zip | Format-Table Name, Length
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ClaudeStartupManager-${{ steps.version.outputs.value }}
+          path: artifacts/*.zip
+          if-no-files-found: error
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*.zip
+          generate_release_notes: true
