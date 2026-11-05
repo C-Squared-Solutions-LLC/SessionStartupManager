@@ -1,7 +1,7 @@
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
 
-namespace ClaudeStartupManager;
+namespace SessionStartupManager;
 
 // Windows only lets a process move its *own* windows between virtual desktops, so instead
 // of moving terminals after the fact we switch to the target desktop first (Ctrl+Win+Arrow,

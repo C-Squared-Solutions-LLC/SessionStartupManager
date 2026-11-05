@@ -1,4 +1,4 @@
-# Draws the app icon (orange rounded square with a ">_" prompt) into app.ico.
+# Draws a provider-neutral blue terminal icon with three session tabs into app.ico.
 param([string]$Out = (Join-Path $PSScriptRoot '..\app.ico'))
 Add-Type -AssemblyName System.Drawing
 
@@ -16,24 +16,37 @@ $pngs = foreach ($s in $sizes) {
     $path.AddArc($w - $d, $w - $d, $d, $d, 0, 90)
     $path.AddArc(0, $w - $d, $d, $d, 90, 90)
     $path.CloseFigure()
-    $g.FillPath((New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(217, 119, 87))), $path)
+    $background = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(37, 99, 155))
+    $g.FillPath($background, $path)
+    $background.Dispose()
+    $path.Dispose()
+
+    $tabs = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(142, 216, 237)), ([Math]::Max(1.1, $s * 0.055))
+    $tabs.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
+    $tabs.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
+    foreach ($x in @(0.24, 0.44, 0.64)) {
+        $g.DrawLine($tabs, [single]($s * $x), [single]($s * 0.20), [single]($s * ($x + 0.10)), [single]($s * 0.20))
+    }
+    $tabs.Dispose()
 
     $pen = New-Object System.Drawing.Pen ([System.Drawing.Color]::White), ([Math]::Max(1.6, $s * 0.11))
     $pen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
     $pen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
     $pen.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
     $chevron = [System.Drawing.PointF[]]@(
-        (New-Object System.Drawing.PointF ($s * 0.24), ($s * 0.30)),
-        (New-Object System.Drawing.PointF ($s * 0.47), ($s * 0.50)),
-        (New-Object System.Drawing.PointF ($s * 0.24), ($s * 0.70)))
+        (New-Object System.Drawing.PointF ($s * 0.24), ($s * 0.39)),
+        (New-Object System.Drawing.PointF ($s * 0.44), ($s * 0.55)),
+        (New-Object System.Drawing.PointF ($s * 0.24), ($s * 0.71)))
     $g.DrawLines($pen, $chevron)
     $g.DrawLine($pen, [single]($s * 0.55), [single]($s * 0.71), [single]($s * 0.78), [single]($s * 0.71))
+    $pen.Dispose()
     $g.Dispose()
 
     $ms = New-Object System.IO.MemoryStream
     $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
     $bmp.Dispose()
     , $ms.ToArray()
+    $ms.Dispose()
 }
 
 $fs = [System.IO.File]::Create([System.IO.Path]::GetFullPath($Out))

@@ -1,7 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace ClaudeStartupManager;
+namespace SessionStartupManager;
 
 internal static class Native
 {

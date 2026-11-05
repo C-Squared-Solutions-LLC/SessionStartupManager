@@ -1,11 +1,13 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
-namespace ClaudeStartupManager;
+namespace SessionStartupManager;
 
-internal enum EntryKind { Claude, Pwsh, WindowsPowerShell, Cmd, Wsl }
+// Keep the original numeric values for older configs.
+internal enum EntryKind { Claude, Pwsh, WindowsPowerShell, Cmd, Wsl, Codex, Agy }
 
-internal enum ClaudeMode { Resume, Continue, New }
+internal enum SessionMode { Resume, Continue, New }
 
 internal enum ArrangeMode { Tile, Maximize, Cascade, KeepSize }
 
@@ -15,13 +17,13 @@ internal sealed class LaunchEntry
     public string Name { get; set; } = "";
     public EntryKind Kind { get; set; } = EntryKind.Claude;
     public string WorkingDirectory { get; set; } = "";
-    public ClaudeMode ClaudeMode { get; set; } = ClaudeMode.Resume;
+    public SessionMode SessionMode { get; set; } = SessionMode.Resume;
     public string SessionId { get; set; } = "";
 
     // WSL only. Blank means wsl.exe's default distro.
     public string Distro { get; set; } = "";
 
-    // Claude: extra CLI args. Shells: command to run once the window is up.
+    // AI sessions: extra CLI args. Shells: command to run once the window is up.
     public string Arguments { get; set; } = "";
 
     // Pins the window title so the running program can't change it (Windows Terminal only).
@@ -35,7 +37,7 @@ internal sealed class LaunchEntry
         Name = o.Name;
         Kind = o.Kind;
         WorkingDirectory = o.WorkingDirectory;
-        ClaudeMode = o.ClaudeMode;
+        SessionMode = o.SessionMode;
         SessionId = o.SessionId;
         Distro = o.Distro;
         Arguments = o.Arguments;
@@ -45,6 +47,8 @@ internal sealed class LaunchEntry
     public static string KindText(EntryKind k) => k switch
     {
         EntryKind.Claude => "Claude Code",
+        EntryKind.Codex => "Codex",
+        EntryKind.Agy => "AGY (Antigravity)",
         EntryKind.Pwsh => "PowerShell 7",
         EntryKind.WindowsPowerShell => "Windows PowerShell",
         EntryKind.Cmd => "Command Prompt",
@@ -52,11 +56,15 @@ internal sealed class LaunchEntry
         _ => k.ToString(),
     };
 
-    public static string ModeText(ClaudeMode m) => m switch
+    public static bool IsSession(EntryKind kind) => kind is EntryKind.Claude or EntryKind.Codex or EntryKind.Agy;
+
+    public static string SessionKey(EntryKind kind, string id) => $"{kind}:{id?.Trim()}";
+
+    public static string ModeText(SessionMode m) => m switch
     {
-        ClaudeMode.Resume => "Resume session",
-        ClaudeMode.Continue => "Continue latest in folder",
-        ClaudeMode.New => "New session",
+        SessionMode.Resume => "Resume session",
+        SessionMode.Continue => "Continue latest in folder",
+        SessionMode.New => "New session",
         _ => m.ToString(),
     };
 }
@@ -97,7 +105,7 @@ internal sealed class LaunchGroup
 internal sealed class AppConfig
 {
     public bool UseWindowsTerminal { get; set; } = true;
-    public string ClaudeHost { get; set; } = "pwsh";
+    public string SessionHost { get; set; } = "pwsh";
     public int DelayMs { get; set; } = 200;
     public int StartupDelaySec { get; set; } = 20;
     public bool ReturnToStartingDesktop { get; set; } = true;
@@ -111,9 +119,11 @@ internal sealed class AppConfig
     public bool? TabsInOneWindow { get; set; }
 
     public static string Dir =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ClaudeStartupManager");
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SessionStartupManager");
 
     public static string FilePath => Path.Combine(Dir, "config.json");
+    public static string LegacyFilePath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ClaudeStartupManager", "config.json");
 
     static readonly JsonSerializerOptions Json = new()
     {
@@ -158,23 +168,52 @@ internal sealed class AppConfig
     {
         error = null;
         AppConfig cfg = null;
-        if (File.Exists(FilePath))
+        // Read the old file on first run; Save writes the new location and leaves the original intact.
+        string source = File.Exists(FilePath) ? FilePath : LegacyFilePath;
+        if (File.Exists(source))
         {
             try
             {
-                cfg = JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(FilePath), Json);
+                cfg = Deserialize(File.ReadAllText(source));
             }
             catch (Exception ex)
             {
                 // Keep the broken file instead of silently overwriting it on the next save.
-                string bad = FilePath + ".bad";
-                try { File.Copy(FilePath, bad, true); } catch { }
-                error = $"Couldn't read {FilePath}: {ex.Message}\nA copy was saved to {bad}.";
+                string bad = source + ".bad";
+                bool backedUp = false;
+                try { File.Copy(source, bad, true); backedUp = true; } catch { }
+                error = $"Couldn't read {source}: {ex.Message}\n"
+                    + (backedUp ? $"A copy was saved to {bad}." : "The original file could not be backed up.");
             }
         }
         cfg ??= new AppConfig();
         cfg.Normalize();
         return cfg;
+    }
+
+    internal static AppConfig Deserialize(string text)
+    {
+        var root = JsonNode.Parse(text) as JsonObject ?? throw new JsonException("Expected a config object.");
+        Rename(root, "ClaudeHost", "SessionHost");
+        if (root["Entries"] is JsonArray entries) MigrateEntries(entries);
+        if (root["Groups"] is JsonArray groups)
+            foreach (var group in groups.OfType<JsonObject>())
+                if (group["Entries"] is JsonArray groupedEntries) MigrateEntries(groupedEntries);
+        var cfg = root.Deserialize<AppConfig>(Json);
+        cfg.Normalize();
+        return cfg;
+
+        static void MigrateEntries(JsonArray entries)
+        {
+            foreach (var entry in entries.OfType<JsonObject>()) Rename(entry, "ClaudeMode", "SessionMode");
+        }
+
+        static void Rename(JsonObject obj, string oldName, string newName)
+        {
+            if (!obj.ContainsKey(newName) && obj.TryGetPropertyValue(oldName, out var value))
+                obj[newName] = value?.DeepClone();
+            obj.Remove(oldName);
+        }
     }
 
     public void Save()

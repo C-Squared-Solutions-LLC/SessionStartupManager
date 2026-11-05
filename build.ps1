@@ -1,4 +1,4 @@
-# Builds dist\ClaudeStartupManager.exe (framework-dependent, single file).
+# Builds dist\SessionStartupManager.exe (framework-dependent, single file).
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 
@@ -6,10 +6,10 @@ if (-not (Test-Path .\app.ico)) {
     powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\make-icon.ps1
 }
 
-if (Get-Process ClaudeStartupManager -ErrorAction SilentlyContinue) {
-    throw 'ClaudeStartupManager.exe is running. Close it first so the exe can be replaced.'
+if (Get-Process SessionStartupManager -ErrorAction SilentlyContinue) {
+    throw 'SessionStartupManager.exe is running. Close it first so the exe can be replaced.'
 }
 
-dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o dist
+dotnet publish SessionStartupManager.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o dist
 if ($LASTEXITCODE) { exit $LASTEXITCODE }
-Write-Host "Built $PSScriptRoot\dist\ClaudeStartupManager.exe"
+Write-Host "Built $PSScriptRoot\dist\SessionStartupManager.exe"

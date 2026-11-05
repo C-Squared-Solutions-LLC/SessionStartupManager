@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace ClaudeStartupManager;
+namespace SessionStartupManager;
 
 // WinForms on .NET 8 has no dark mode, so every control is styled by hand. Native parts
 // (title bar, scrollbars, combo drop-downs) get Windows' own dark themes through DWM/uxtheme.
@@ -13,8 +13,8 @@ internal static class Theme
     public static readonly Color Border = Color.FromArgb(78, 78, 78);
     public static readonly Color Text = Color.FromArgb(232, 232, 232);
     public static readonly Color Muted = Color.FromArgb(150, 150, 150);
-    public static readonly Color Accent = Color.FromArgb(217, 119, 87); // the icon's orange
-    public static readonly Color AccentHover = Color.FromArgb(230, 138, 108);
+    public static readonly Color Accent = Color.FromArgb(37, 99, 155); // the icon's blue
+    public static readonly Color AccentHover = Color.FromArgb(48, 119, 180);
     public static readonly Color Selection = Color.FromArgb(70, 82, 102);
 
     public const string AccentTag = "accent";

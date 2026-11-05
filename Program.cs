@@ -1,4 +1,4 @@
-namespace ClaudeStartupManager;
+namespace SessionStartupManager;
 
 internal static class Program
 {
@@ -14,7 +14,7 @@ internal static class Program
 
         var cfg = AppConfig.Load(out string loadError);
         if (loadError != null)
-            MessageBox.Show(loadError, "Claude Startup Manager", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(loadError, "Session Startup Manager", MessageBoxButtons.OK, MessageBoxIcon.Warning);
 
         bool Has(string flag) => args.Any(a => a.Equals(flag, StringComparison.OrdinalIgnoreCase));
         var groupKeys = args.Select((a, i) => (a, i))
@@ -72,7 +72,7 @@ internal static class Program
     }
 
     static void Warn(string text) =>
-        MessageBox.Show(text, "Claude Startup Manager", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        MessageBox.Show(text, "Session Startup Manager", MessageBoxButtons.OK, MessageBoxIcon.Warning);
 }
 
 internal static class AppIcon

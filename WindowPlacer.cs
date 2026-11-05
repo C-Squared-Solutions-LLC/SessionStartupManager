@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace ClaudeStartupManager;
+namespace SessionStartupManager;
 
 internal static class Monitors
 {
@@ -44,7 +44,7 @@ internal static class TerminalWindows
     // Prefers a new window whose title contains one of the expected titles. Something else can
     // open at the same moment (e.g. Terminal restoring a saved window), so a window that doesn't
     // match is only taken once it has been the sole candidate for a moment; programs like
-    // Claude may retitle their window almost immediately.
+    // Session CLIs may retitle their window almost immediately.
     public static IntPtr WaitForNew(HashSet<IntPtr> seen, int timeoutMs, ICollection<string> expectedTitles)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();

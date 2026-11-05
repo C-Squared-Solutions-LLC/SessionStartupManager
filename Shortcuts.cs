@@ -2,19 +2,19 @@ using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
 using System.Text;
 
-namespace ClaudeStartupManager;
+namespace SessionStartupManager;
 
 // Every shortcut gets its own AppUserModelID. Without one, the taskbar treats all shortcuts
 // to the same exe as one app and only lets a single one be pinned.
 internal static class Shortcuts
 {
-    public const string ManagerAppId = "ClaudeStartupManager.Manager";
-    const string LaunchAllAppId = "ClaudeStartupManager.LaunchAll";
-    const string LaunchAllName = "Launch Claude Sessions.lnk";
-    const string ManagerName = "Claude Startup Manager.lnk";
+    public const string ManagerAppId = "SessionStartupManager.Manager";
+    const string LaunchAllAppId = "SessionStartupManager.LaunchAll";
+    const string LaunchAllName = "Launch Sessions.lnk";
+    const string ManagerName = "Session Startup Manager.lnk";
 
     static string Programs => Environment.GetFolderPath(Environment.SpecialFolder.Programs);
-    static string GroupDir => Path.Combine(Programs, "Claude Startup Manager");
+    static string GroupDir => Path.Combine(Programs, "Session Startup Manager");
     static string Exe => Environment.ProcessPath;
 
     // Returns the desktop shortcut to pin.
@@ -34,7 +34,7 @@ internal static class Shortcuts
         Directory.CreateDirectory(GroupDir);
         string path = Path.Combine(GroupDir, "Launch " + SafeFileName(g.Name) + ".lnk");
         RemoveGroup(g, except: path); // drop the shortcut from before a rename
-        Create(path, "--group " + g.Id, $"Launch the \"{g.Name}\" group", "ClaudeStartupManager.Group." + g.Id);
+        Create(path, "--group " + g.Id, $"Launch the \"{g.Name}\" group", "SessionStartupManager.Group." + g.Id);
         return path;
     }
 

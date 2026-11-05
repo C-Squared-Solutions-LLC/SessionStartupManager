@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 
-namespace ClaudeStartupManager;
+namespace SessionStartupManager;
 
 internal sealed class LaunchJob
 {
@@ -121,15 +121,17 @@ internal static class Launcher
         string dir = linuxDir ? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) : ResolveDir(e.WorkingDirectory);
         if (!Directory.Exists(dir)) throw new DirectoryNotFoundException("folder not found: " + dir);
 
-        string title = Clean(e.Kind == EntryKind.Claude ? ClaudeTitle(e, dir) ?? e.Name : e.Name);
+        string title = Clean(LaunchEntry.IsSession(e.Kind) ? SessionTitle(e, dir) ?? e.Name : e.Name);
         if (title.Length == 0) title = e.Kind == EntryKind.Wsl && !string.IsNullOrWhiteSpace(e.Distro) ? e.Distro : LaunchEntry.KindText(e.Kind);
 
         var p = new Plan { Title = title, Dir = dir, Lock = e.LockTitle };
         switch (e.Kind)
         {
             case EntryKind.Claude:
-                p.Exe = ClaudeHost(cfg);
-                p.Args = PsArgs(PsTitle(title) + "\n" + ClaudeCommand(e));
+            case EntryKind.Codex:
+            case EntryKind.Agy:
+                p.Exe = SessionHost(cfg);
+                p.Args = PsArgs(PsTitle(title) + "\n" + SessionCommand(e));
                 break;
             case EntryKind.Pwsh:
                 p.Exe = "pwsh.exe";
@@ -175,28 +177,51 @@ internal static class Launcher
         return d.StartsWith('/') || d == "~" || d.StartsWith("~/");
     }
 
-    // The /rename name Claude stored for the session, falling back to Claude's auto title.
-    static string ClaudeTitle(LaunchEntry e, string dir) => e.ClaudeMode switch
+    static string SessionTitle(LaunchEntry e, string dir) => e.SessionMode switch
     {
-        ClaudeMode.Resume when !string.IsNullOrWhiteSpace(e.SessionId) => SessionScanner.TitleForSession(e.SessionId.Trim()),
-        ClaudeMode.Continue => SessionScanner.TitleForLatestInFolder(dir),
+        SessionMode.Resume when !string.IsNullOrWhiteSpace(e.SessionId) => SessionScanner.TitleForSession(e.Kind, e.SessionId.Trim()),
+        SessionMode.Continue => SessionScanner.TitleForLatestInFolder(e.Kind, dir),
         _ => null,
     };
 
-    static string ClaudeCommand(LaunchEntry e)
+    internal static string SessionCommand(LaunchEntry e)
     {
-        var sb = new StringBuilder("claude");
-        switch (e.ClaudeMode)
+        string command = e.Kind switch
         {
-            case ClaudeMode.Resume:
+            EntryKind.Claude => "claude",
+            EntryKind.Codex => "codex",
+            EntryKind.Agy => "agy",
+            _ => throw new ArgumentException("Not an AI session."),
+        };
+        // npm installs a .ps1 and a .cmd shim. Use the latter when available so a
+        // restrictive PowerShell execution policy doesn't prevent starting the CLI.
+        if (OnPath(command + ".exe")) command += ".exe";
+        else if (OnPath(command + ".cmd")) command += ".cmd";
+        var sb = new StringBuilder(command);
+        switch (e.Kind, e.SessionMode)
+        {
+            case (EntryKind.Claude, SessionMode.Resume):
                 sb.Append(" --resume");
                 if (!string.IsNullOrWhiteSpace(e.SessionId)) sb.Append(' ').Append(PsQuote(e.SessionId.Trim()));
                 break;
-            case ClaudeMode.Continue:
+            case (EntryKind.Claude, SessionMode.Continue):
+            case (EntryKind.Agy, SessionMode.Continue):
                 sb.Append(" --continue");
                 break;
-            case ClaudeMode.New:
+            case (EntryKind.Claude, SessionMode.New):
                 if (!string.IsNullOrWhiteSpace(e.Name)) sb.Append(" --name ").Append(PsQuote(e.Name.Trim()));
+                break;
+            case (EntryKind.Codex, SessionMode.Resume):
+                sb.Append(" resume");
+                if (!string.IsNullOrWhiteSpace(e.SessionId)) sb.Append(' ').Append(PsQuote(e.SessionId.Trim()));
+                break;
+            case (EntryKind.Codex, SessionMode.Continue):
+                sb.Append(" resume --last");
+                break;
+            case (EntryKind.Agy, SessionMode.Resume):
+                if (string.IsNullOrWhiteSpace(e.SessionId))
+                    throw new ArgumentException("AGY needs a conversation ID to resume. Pick a cached session or use Continue latest in folder.");
+                sb.Append(" --conversation ").Append(PsQuote(e.SessionId.Trim()));
                 break;
         }
         if (!string.IsNullOrWhiteSpace(e.Arguments)) sb.Append(' ').Append(e.Arguments.Trim());
@@ -276,8 +301,8 @@ internal static class Launcher
         return d;
     }
 
-    static string ClaudeHost(AppConfig cfg) =>
-        string.Equals(cfg.ClaudeHost, "powershell", StringComparison.OrdinalIgnoreCase) || !OnPath("pwsh.exe")
+    static string SessionHost(AppConfig cfg) =>
+        string.Equals(cfg.SessionHost, "powershell", StringComparison.OrdinalIgnoreCase) || !OnPath("pwsh.exe")
             ? "powershell.exe"
             : "pwsh.exe";
 

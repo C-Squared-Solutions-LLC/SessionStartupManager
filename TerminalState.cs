@@ -4,12 +4,12 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
-namespace ClaudeStartupManager;
+namespace SessionStartupManager;
 
 // With "firstWindowPreference": "persistedWindowLayout", Windows Terminal reopens every window
 // that was open when it last closed. A cold start from the launcher would then bring back old
 // launcher tabs (including entries since removed from a group) next to the fresh ones, and
-// resume the same Claude session twice. Before a cold start, drop the launcher's tabs from the
+// resume the same session twice. Before a cold start, drop the launcher's tabs from the
 // saved layout. Tabs the user opened by hand are kept.
 internal static class TerminalState
 {
@@ -76,7 +76,7 @@ internal static class TerminalState
         }
         if (!changed) return;
 
-        File.Copy(file, file + ".csm-bak", overwrite: true);
+        File.Copy(file, file + ".ssm-bak", overwrite: true);
         root["persistedWindowLayouts"] = keptWindows;
         string tmp = file + ".tmp";
         File.WriteAllText(tmp, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));

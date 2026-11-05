@@ -6,14 +6,19 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>disable</Nullable>
-    <AssemblyName>ClaudeStartupManager</AssemblyName>
-    <RootNamespace>ClaudeStartupManager</RootNamespace>
+    <AssemblyName>SessionStartupManager</AssemblyName>
+    <RootNamespace>SessionStartupManager</RootNamespace>
     <ApplicationIcon>app.ico</ApplicationIcon>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <Company>C-Squared Solutions LLC</Company>
-    <Product>Claude Startup Manager</Product>
+    <Product>Session Startup Manager</Product>
     <Copyright>Copyright (c) 2026 C-Squared Solutions LLC</Copyright>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests\**\*.cs" />
+    <InternalsVisibleTo Include="SessionStartupManager.Tests" />
+  </ItemGroup>
 
 </Project>

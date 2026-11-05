@@ -1,4 +1,4 @@
-namespace ClaudeStartupManager;
+namespace SessionStartupManager;
 
 internal sealed class EntryDialog : Form
 {
@@ -12,7 +12,7 @@ internal sealed class EntryDialog : Form
     readonly ComboBox _distro = new() { DropDownStyle = ComboBoxStyle.DropDown, Dock = DockStyle.Fill };
     readonly TextBox _dir = new() { Dock = DockStyle.Fill };
     readonly ComboBox _mode = new() { DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill };
-    readonly TextBox _session = new() { Dock = DockStyle.Fill, PlaceholderText = "blank = show Claude's resume picker" };
+    readonly TextBox _session = new() { Dock = DockStyle.Fill };
     readonly TextBox _args = new() { Dock = DockStyle.Fill };
     readonly CheckBox _lock = new() { Text = "Lock window title (the program can't rename it; Windows Terminal only)", AutoSize = true };
     readonly CheckBox _enabled = new() { Text = "Launch with its group", AutoSize = true };
@@ -20,15 +20,15 @@ internal sealed class EntryDialog : Form
     readonly Label _hint = new() { AutoSize = true, MaximumSize = new Size(520, 0), ForeColor = SystemColors.GrayText, Margin = new Padding(3, 8, 3, 3) };
     readonly Button _pick = new() { Text = "Pick…", AutoSize = true };
     readonly Label _distroLabel = Lbl("Distro");
-    readonly Label _modeLabel = Lbl("Claude mode");
+    readonly Label _modeLabel = Lbl("Session mode");
     readonly Label _sessionLabel = Lbl("Session id");
-    readonly IEnumerable<string> _knownIds;
+    readonly IEnumerable<LaunchGroup> _groups;
     bool _loading = true;
 
-    public EntryDialog(LaunchEntry entry, IEnumerable<string> knownIds)
+    public EntryDialog(LaunchEntry entry, IEnumerable<LaunchGroup> groups)
     {
         _e = entry;
-        _knownIds = knownIds;
+        _groups = groups;
         Text = string.IsNullOrWhiteSpace(entry.Name) ? "New window" : "Edit " + entry.Name;
         Icon = AppIcon.Get();
         Font = new Font("Segoe UI", 9f);
@@ -40,7 +40,7 @@ internal sealed class EntryDialog : Form
         AutoSizeMode = AutoSizeMode.GrowAndShrink;
 
         foreach (EntryKind k in Enum.GetValues<EntryKind>()) _kind.Items.Add(new Choice<EntryKind>(k, LaunchEntry.KindText(k)));
-        foreach (ClaudeMode m in Enum.GetValues<ClaudeMode>()) _mode.Items.Add(new Choice<ClaudeMode>(m, LaunchEntry.ModeText(m)));
+        foreach (SessionMode m in Enum.GetValues<SessionMode>()) _mode.Items.Add(new Choice<SessionMode>(m, LaunchEntry.ModeText(m)));
 
         var browse = new Button { Text = "Browse…", AutoSize = true };
         browse.Click += (_, _) => BrowseFolder();
@@ -76,7 +76,7 @@ internal sealed class EntryDialog : Form
         Theme.Apply(this);
 
         _kind.SelectedIndex = (int)entry.Kind;
-        _mode.SelectedIndex = (int)entry.ClaudeMode;
+        _mode.SelectedIndex = (int)entry.SessionMode;
         _name.Text = entry.Name;
         _distro.Text = entry.Distro;
         _dir.Text = entry.WorkingDirectory;
@@ -94,10 +94,15 @@ internal sealed class EntryDialog : Form
     }
 
     EntryKind Kind => ((Choice<EntryKind>)_kind.SelectedItem).Value;
-    ClaudeMode Mode => ((Choice<ClaudeMode>)_mode.SelectedItem).Value;
+    SessionMode Mode => ((Choice<SessionMode>)_mode.SelectedItem).Value;
 
     void KindChanged()
     {
+        if (!_loading)
+        {
+            // A session ID belongs to its provider; never reuse it after switching type.
+            _session.Clear();
+        }
         if (!_loading && Kind == EntryKind.Wsl)
         {
             FillDistros();
@@ -120,15 +125,20 @@ internal sealed class EntryDialog : Form
 
     void UpdateState()
     {
-        bool claude = Kind == EntryKind.Claude, wsl = Kind == EntryKind.Wsl;
+        bool session = LaunchEntry.IsSession(Kind), wsl = Kind == EntryKind.Wsl;
         _distroLabel.Visible = _distro.Visible = wsl;
-        _modeLabel.Visible = _mode.Visible = claude;
-        bool resume = claude && Mode == ClaudeMode.Resume;
+        _modeLabel.Visible = _mode.Visible = session;
+        bool resume = session && Mode == SessionMode.Resume;
         _sessionLabel.Visible = _session.Visible = _pick.Visible = resume;
-        _argsLabel.Text = claude ? "Extra claude args" : "Startup command";
+        _sessionLabel.Text = Kind == EntryKind.Agy ? "Conversation id" : "Session id / name";
+        _session.PlaceholderText = Kind == EntryKind.Agy ? "required for resume; pick a recent workspace or paste an ID"
+            : $"blank = show {LaunchEntry.KindText(Kind)}'s resume picker";
+        _argsLabel.Text = session ? "Extra CLI args" : "Startup command";
         _args.PlaceholderText = Kind switch
         {
             EntryKind.Claude => "e.g. --model opus --permission-mode plan",
+            EntryKind.Codex => "e.g. --profile work",
+            EntryKind.Agy => "e.g. --mode plan",
             EntryKind.Cmd => "e.g. npm run dev   (cmd syntax)",
             EntryKind.Wsl => "e.g. docker compose up   (bash, then you get a shell)",
             _ => "e.g. npm run dev   (PowerShell syntax)",
@@ -138,9 +148,21 @@ internal sealed class EntryDialog : Form
             EntryKind.Wsl => "Folder can be a Linux path (~, /home/you/proj) or a Windows path (C:\\Users\\…, mounted under /mnt/c). The command runs in bash -i, then drops to an interactive shell.",
             EntryKind.Claude => Mode switch
             {
-                ClaudeMode.Resume => "The window title comes from the session's /rename name (or Claude's auto title), read fresh on every launch. Claude keeps it updated while running unless you lock it.",
-                ClaudeMode.Continue => "Runs claude --continue: picks up the most recent conversation in the folder. The title comes from that conversation's name.",
+                SessionMode.Resume => "The window title comes from the session's /rename name (or Claude's auto title), read fresh on every launch. Claude keeps it updated while running unless you lock it.",
+                SessionMode.Continue => "Runs claude --continue: picks up the most recent conversation in the folder. The title comes from that conversation's name.",
                 _ => "Starts a fresh session with --name set to the name above.",
+            },
+            EntryKind.Codex => Mode switch
+            {
+                SessionMode.Resume => "Runs codex resume with the session ID or name. Leave it blank to choose in Codex. Pick lists locally saved Codex sessions.",
+                SessionMode.Continue => "Runs codex resume --last: continues the most recent session in this folder.",
+                _ => "Runs codex to start a fresh session. The name above sets the initial window title.",
+            },
+            EntryKind.Agy => Mode switch
+            {
+                SessionMode.Resume => "Runs agy --conversation with the ID above. Pick lists the latest cached conversation per workspace; paste an ID to resume an older one.",
+                SessionMode.Continue => "Runs agy --continue: continues the latest conversation in this folder, or starts a new one if none is available.",
+                _ => "Runs agy to start a fresh Antigravity session. The name above sets the initial window title.",
             },
             _ => "The window title is the name above. Leave the command blank for a plain shell in that folder.",
         };
@@ -155,7 +177,7 @@ internal sealed class EntryDialog : Form
 
     void PickSession()
     {
-        using var dlg = new SessionPickerDialog(false, _knownIds);
+        using var dlg = new SessionPickerDialog(false, _groups, Kind);
         if (dlg.ShowDialog(this) != DialogResult.OK || dlg.Selected.Count == 0) return;
         var s = dlg.Selected[0];
         _session.Text = s.Id;
@@ -167,6 +189,14 @@ internal sealed class EntryDialog : Form
     {
         if (DialogResult != DialogResult.OK) return;
 
+        if (Kind == EntryKind.Agy && Mode == SessionMode.Resume && string.IsNullOrWhiteSpace(_session.Text))
+        {
+            e.Cancel = true;
+            _hint.Text = "Enter a conversation ID, pick a cached session, or choose Continue latest in folder.";
+            _session.Focus();
+            return;
+        }
+
         string dir = _dir.Text.Trim();
         bool linuxPath = Kind == EntryKind.Wsl && (dir.StartsWith('/') || dir.StartsWith('~'));
         if (dir.Length > 0 && !linuxPath && !dir.StartsWith("~") && !Directory.Exists(Environment.ExpandEnvironmentVariables(dir)))
@@ -176,7 +206,7 @@ internal sealed class EntryDialog : Form
         }
 
         _e.Kind = Kind;
-        _e.ClaudeMode = Mode;
+        _e.SessionMode = Mode;
         _e.Name = _name.Text.Trim();
         _e.Distro = Kind == EntryKind.Wsl ? _distro.Text.Trim() : "";
         _e.WorkingDirectory = dir;

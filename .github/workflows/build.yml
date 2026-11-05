@@ -29,10 +29,13 @@ jobs:
           "value=$v" >> $env:GITHUB_OUTPUT
           Write-Host "Version $v"
 
+      - name: Regression checks
+        run: dotnet run --project tests/SessionStartupManager.Tests.csproj -c Release
+
       # Small exe, needs the .NET 8 Desktop Runtime installed.
       - name: Publish (framework-dependent)
         run: >
-          dotnet publish ClaudeStartupManager.csproj -c Release -r win-x64
+          dotnet publish SessionStartupManager.csproj -c Release -r win-x64
           --self-contained false -p:PublishSingleFile=true
           -p:Version=${{ steps.version.outputs.value }}
           -o artifacts/framework-dependent
@@ -40,7 +43,7 @@ jobs:
       # Larger exe that runs without any .NET install.
       - name: Publish (self-contained)
         run: >
-          dotnet publish ClaudeStartupManager.csproj -c Release -r win-x64
+          dotnet publish SessionStartupManager.csproj -c Release -r win-x64
           --self-contained true -p:PublishSingleFile=true
           -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true
           -p:Version=${{ steps.version.outputs.value }}
@@ -54,13 +57,13 @@ jobs:
             $dir = "artifacts/$flavor"
             Copy-Item README.md, LICENSE $dir
             Get-ChildItem $dir -Filter *.pdb | Remove-Item
-            Compress-Archive -Path "$dir/*" -DestinationPath "artifacts/ClaudeStartupManager-$v-win-x64-$flavor.zip"
+            Compress-Archive -Path "$dir/*" -DestinationPath "artifacts/SessionStartupManager-$v-win-x64-$flavor.zip"
           }
           Get-ChildItem artifacts/*.zip | Format-Table Name, Length
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ClaudeStartupManager-${{ steps.version.outputs.value }}
+          name: SessionStartupManager-${{ steps.version.outputs.value }}
           path: artifacts/*.zip
           if-no-files-found: error
 

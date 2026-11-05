@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace ClaudeStartupManager;
+namespace SessionStartupManager;
 
 internal sealed class MainForm : Form
 {
@@ -38,7 +38,7 @@ internal sealed class MainForm : Form
     public MainForm(AppConfig cfg)
     {
         _cfg = cfg;
-        Text = "Claude Startup Manager";
+        Text = "Session Startup Manager";
         Icon = AppIcon.Get();
         Font = new Font("Segoe UI", 9f);
         ClientSize = new Size(1280, 620);
@@ -78,7 +78,7 @@ internal sealed class MainForm : Form
         var entryBar = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(4, 2, 4, 2) };
         entryBar.Controls.AddRange(new Control[]
         {
-            Btn("Add Claude sessions…", AddClaudeSessions),
+            Btn("Add sessions…", AddSessions),
             Btn("Add window…", AddWindow),
             Btn("Edit", EditSelected),
             Btn("Duplicate", DuplicateSelected),
@@ -104,7 +104,7 @@ internal sealed class MainForm : Form
         settings.Controls.AddRange(new Control[]
         {
             _useWt, _returnHome,
-            Lbl("Claude runs in"), _host,
+            Lbl("AI sessions run in"), _host,
             Lbl("Extra delay (ms)"), _delay,
             Lbl("Startup delay (s)"), _startupDelay,
         });
@@ -183,7 +183,7 @@ internal sealed class MainForm : Form
         _loading = true;
         _useWt.Checked = cfg.UseWindowsTerminal;
         _returnHome.Checked = cfg.ReturnToStartingDesktop;
-        _host.SelectedItem = string.Equals(cfg.ClaudeHost, "powershell", StringComparison.OrdinalIgnoreCase) ? "powershell" : "pwsh";
+        _host.SelectedItem = string.Equals(cfg.SessionHost, "powershell", StringComparison.OrdinalIgnoreCase) ? "powershell" : "pwsh";
         _delay.Value = Math.Clamp(cfg.DelayMs, 0, 10000);
         _startupDelay.Value = Math.Clamp(cfg.StartupDelaySec, 0, 600);
         _loading = false;
@@ -192,20 +192,21 @@ internal sealed class MainForm : Form
         Save(); // writes migrated configs and keeps the Run entry pointing at this exe
 
         if (!Launcher.OnPath("wt.exe")) _status.Text = "Windows Terminal not found. Windows will open in the classic console, and titles can't be locked.";
-        else if (cfg.Groups.All(g => g.Entries.Count == 0)) _status.Text = "Start with \"Add Claude sessions…\" to pick from your named sessions.";
+        else if (cfg.Groups.All(g => g.Entries.Count == 0)) _status.Text = "Use \"Add sessions…\" for Claude, Codex or AGY, or \"Add window…\" to set up a new session or shell.";
         else _status.Text = $"Config: {AppConfig.FilePath}";
     }
 
-    // Pull the latest /rename names so the list matches what Claude calls each session.
+    // Pull saved titles for providers that expose them locally.
     protected override async void OnShown(EventArgs e)
     {
         base.OnShown(e);
         var targets = _cfg.Groups.SelectMany(g => g.Entries)
-            .Where(x => x.Kind == EntryKind.Claude && x.ClaudeMode == ClaudeMode.Resume && !string.IsNullOrWhiteSpace(x.SessionId))
+            .Where(x => (x.Kind is EntryKind.Claude or EntryKind.Codex) && x.SessionMode == SessionMode.Resume && !string.IsNullOrWhiteSpace(x.SessionId))
             .ToList();
         if (targets.Count == 0) return;
 
-        var titles = await Task.Run(() => targets.Select(t => SessionScanner.TitleForSession(t.SessionId.Trim())).ToList());
+        var titles = await Task.Run(() => targets.Select(t => SessionScanner.TitleForSession(t.Kind, t.SessionId.Trim())).ToList());
+        if (IsDisposed) return;
         int changed = 0;
         for (int i = 0; i < targets.Count; i++)
         {
@@ -215,7 +216,7 @@ internal sealed class MainForm : Form
         {
             Save();
             RefreshGrid(CurrentIndex);
-            _status.Text = $"Synced {changed} name(s) from Claude sessions.";
+            _status.Text = $"Synced {changed} name(s) from saved sessions.";
         }
     }
 
@@ -423,13 +424,13 @@ internal sealed class MainForm : Form
         _grid.Rows.Clear();
         foreach (var e in Entries)
         {
-            bool claude = e.Kind == EntryKind.Claude;
-            string detail = claude && e.ClaudeMode == ClaudeMode.Resume
+            bool session = LaunchEntry.IsSession(e.Kind);
+            string detail = session && e.SessionMode == SessionMode.Resume
                 ? (string.IsNullOrWhiteSpace(e.SessionId) ? "(picker)" : e.SessionId[..Math.Min(8, e.SessionId.Length)]) + " " + e.Arguments
                 : e.Arguments;
             string mode = e.Kind switch
             {
-                EntryKind.Claude => LaunchEntry.ModeText(e.ClaudeMode),
+                EntryKind.Claude or EntryKind.Codex or EntryKind.Agy => LaunchEntry.ModeText(e.SessionMode),
                 EntryKind.Wsl => string.IsNullOrWhiteSpace(e.Distro) ? "(default distro)" : e.Distro,
                 _ => "",
             };
@@ -439,8 +440,8 @@ internal sealed class MainForm : Form
                 LaunchEntry.KindText(e.Kind),
                 mode,
                 string.IsNullOrWhiteSpace(e.WorkingDirectory) ? "~" : e.WorkingDirectory,
-                detail.Trim(),
-                e.LockTitle ? "Locked" : claude ? "Claude" : "Fixed");
+                detail?.Trim() ?? "",
+                e.LockTitle ? "Locked" : session ? "App" : "Fixed");
         }
         _loading = was;
 
@@ -457,21 +458,18 @@ internal sealed class MainForm : Form
     List<int> SelectedIndexes() =>
         _grid.SelectedRows.Cast<DataGridViewRow>().Select(r => r.Index).OrderBy(i => i).ToList();
 
-    IEnumerable<string> KnownSessionIds() =>
-        _cfg.Groups.SelectMany(g => g.Entries).Where(e => !string.IsNullOrWhiteSpace(e.SessionId)).Select(e => e.SessionId);
-
-    void AddClaudeSessions()
+    void AddSessions()
     {
-        using var dlg = new SessionPickerDialog(true, KnownSessionIds());
+        using var dlg = new SessionPickerDialog(true, _cfg.Groups);
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
         foreach (var s in dlg.Selected)
         {
             Entries.Add(new LaunchEntry
             {
-                Kind = EntryKind.Claude,
-                ClaudeMode = ClaudeMode.Resume,
+                Kind = s.Kind,
+                SessionMode = SessionMode.Resume,
                 SessionId = s.Id,
-                Name = s.Title ?? s.Id[..8],
+                Name = s.Title ?? s.Id[..Math.Min(8, s.Id.Length)],
                 WorkingDirectory = s.Cwd,
             });
         }
@@ -481,8 +479,8 @@ internal sealed class MainForm : Form
 
     void AddWindow()
     {
-        var entry = new LaunchEntry { Kind = EntryKind.Pwsh, ClaudeMode = ClaudeMode.Continue };
-        using var dlg = new EntryDialog(entry, KnownSessionIds());
+        var entry = new LaunchEntry { Kind = EntryKind.Pwsh, SessionMode = SessionMode.Continue };
+        using var dlg = new EntryDialog(entry, _cfg.Groups);
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
         Entries.Add(entry);
         EntriesChanged(Entries.Count - 1);
@@ -493,7 +491,7 @@ internal sealed class MainForm : Form
         int i = CurrentIndex;
         if (i < 0) return;
         var copy = Entries[i].Clone();
-        using var dlg = new EntryDialog(copy, KnownSessionIds());
+        using var dlg = new EntryDialog(copy, _cfg.Groups);
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
         Entries[i].CopyFrom(copy);
         EntriesChanged(i);
@@ -566,10 +564,10 @@ internal sealed class MainForm : Form
     // ================= shortcuts
 
     void PinLaunchAll() => Pin(Shortcuts.CreateLaunchAll, "Launch all",
-        "\"Launch Claude Sessions\" is on your desktop and in the Start menu.");
+        "\"Launch Sessions\" is on your desktop and in the Start menu.");
 
     void PinGroup() => Pin(() => Shortcuts.CreateGroup(Group), Group.Name,
-        $"\"Launch {Group.Name}\" is in Start menu > Claude Startup Manager.");
+        $"\"Launch {Group.Name}\" is in Start menu > Session Startup Manager.");
 
     void Pin(Func<string> create, string what, string where)
     {
@@ -596,7 +594,7 @@ internal sealed class MainForm : Form
         if (_loading) return;
         _cfg.UseWindowsTerminal = _useWt.Checked;
         _cfg.ReturnToStartingDesktop = _returnHome.Checked;
-        _cfg.ClaudeHost = (string)_host.SelectedItem ?? "pwsh";
+        _cfg.SessionHost = (string)_host.SelectedItem ?? "pwsh";
         _cfg.DelayMs = (int)_delay.Value;
         _cfg.StartupDelaySec = (int)_startupDelay.Value;
         Save();
